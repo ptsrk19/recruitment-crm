@@ -1,0 +1,281 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  RECRUITER
+  CLIENT
+}
+
+// ── Tenant ───────────────────────────────────────────────────────────────────
+// Every other model is scoped to an Organization (orgId). All API queries
+// filter by req.user.orgId so one tenant can never see another tenant's data.
+model Organization {
+  id                 String   @id @default(cuid())
+  name               String
+  gstin              String? // used to decide CGST+SGST vs IGST on invoices
+  pan                String?
+  address            String?
+  email              String?
+  phone              String?
+  bank               String?
+  accountNo          String?
+  ifsc               String?
+  sacCode            String   @default("998513")
+  logoDataUrl        String?  @db.Text
+  invoiceAccentColor String?  @default("#1E1B4B")
+  invoiceFontFamily  String?  @default("'Segoe UI',Arial,sans-serif")
+  invoiceShowLogo    Boolean  @default(true)
+  invoiceShowStamp   Boolean  @default(true)
+  invoiceFooterNote  String?  @db.Text
+  invoiceServiceDesc String?  @db.Text
+  createdAt          DateTime @default(now())
+
+  users      User[]
+  clients    Client[]
+  jobs       Job[]
+  candidates Candidate[]
+  placements Placement[]
+  invoices   Invoice[]
+  interviews Interview[]
+  activities Activity[]
+  files      FileAsset[]
+}
+
+// A login. ADMIN and RECRUITER belong only to orgId. CLIENT additionally
+// belongs to one Client record (clientId) and every query for that role is
+// filtered by clientId as well as orgId, both server-side.
+model User {
+  id           String       @id @default(cuid())
+  orgId        String
+  org          Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  role         Role
+  name         String
+  email        String       @unique
+  passwordHash String
+  clientId     String?
+  client       Client?      @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  createdAt    DateTime     @default(now())
+
+  candidatesHandled Candidate[] @relation("RecruiterCandidates")
+
+  @@index([orgId])
+  @@index([clientId])
+}
+
+model Client {
+  id             String    @id @default(cuid())
+  orgId          String
+  org            Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  name           String
+  contact        String?
+  email          String?
+  phone          String?
+  industry       String?
+  gstin          String?
+  billingAddress String?   @db.Text
+  billingRate    Float     @default(0)
+  useBins        Boolean   @default(false)
+  ctcBins        Json      @default("[]")
+  paymentTerms   Int       @default(30)
+  msaExpiry      String?
+  msaFileId      String?   @unique
+  msaFile        FileAsset? @relation("ClientMsa", fields: [msaFileId], references: [id])
+  createdAt      DateTime  @default(now())
+
+  users      User[]
+  jobs       Job[]
+  candidates Candidate[]
+  placements Placement[]
+  invoices   Invoice[]
+  interviews Interview[]
+
+  @@index([orgId])
+}
+
+// Uploaded binary files (CVs, MSAs, interview score sheets) live in their own
+// table, fetched on demand — never embedded in list/JSON payloads. This is
+// what prevents the old "one giant JSON blob over the 5MB storage cap" bug.
+model FileAsset {
+  id        String   @id @default(cuid())
+  orgId     String
+  org       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  filename  String
+  mimeType  String
+  size      Int
+  data      Bytes
+  createdAt DateTime @default(now())
+
+  clientMsa      Client?     @relation("ClientMsa")
+  candidateCv    Candidate?  @relation("CandidateCv")
+  candidateVideo Candidate?  @relation("CandidateVideo")
+
+  @@index([orgId])
+}
+
+model Job {
+  id                 String   @id @default(cuid())
+  orgId              String
+  org                Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  clientId           String
+  client             Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  title              String
+  status             String   @default("Open")
+  salaryMin          Int?
+  salaryMax          Int?
+  location           String?
+  description        String?  @db.Text
+  workMode           String?
+  openPositions      Int      @default(1)
+  closedPositions    Int      @default(0)
+  noticePeriodDays   Int      @default(30)
+  needByDate         String?
+  experienceMin      Int      @default(0)
+  experienceMax      Int      @default(0)
+  skills             String?
+  postedByClient     Boolean  @default(false)
+  assignedRecruiters String[] @default([])
+  closureLog         Json     @default("[]")
+  createdAt          String
+
+  candidates  Candidate[]
+  placements  Placement[]
+  interviews  Interview[]
+
+  @@index([orgId])
+  @@index([clientId])
+}
+
+model Candidate {
+  id          String   @id @default(cuid())
+  orgId       String
+  org         Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  clientId    String?
+  client      Client?  @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  jobId       String?
+  job         Job?     @relation(fields: [jobId], references: [id], onDelete: SetNull)
+  recruiterId String?
+  recruiter   User?    @relation("RecruiterCandidates", fields: [recruiterId], references: [id], onDelete: SetNull)
+  name        String
+  email       String
+  phone       String?
+  role        String?
+  status      String   @default("CV Submitted")
+  aiScore     Int?
+  tags        String[] @default([])
+  notes       String?  @db.Text
+  isDuplicate Boolean  @default(false)
+  cvFileId    String?  @unique
+  cvFile      FileAsset? @relation("CandidateCv", fields: [cvFileId], references: [id])
+  videoFileId String?  @unique
+  videoFile   FileAsset? @relation("CandidateVideo", fields: [videoFileId], references: [id])
+  createdAt   String
+
+  placements Placement[]
+  invoices   Invoice[]
+  interviews Interview[]
+
+  @@index([orgId])
+  @@index([clientId])
+  @@index([jobId])
+  @@index([recruiterId])
+}
+
+model Placement {
+  id            String   @id @default(cuid())
+  orgId         String
+  org           Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  candidateId   String
+  candidate     Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  jobId         String
+  job           Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  clientId      String
+  client        Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  ctc           Int
+  billingRate   Float
+  fee           Float
+  startDate     String
+  placedAt      String
+  invoiceStatus String   @default("Draft")
+  feedback      String?  @db.Text
+
+  invoice Invoice?
+
+  @@index([orgId])
+  @@index([clientId])
+}
+
+model Invoice {
+  id             String    @id @default(cuid())
+  orgId          String
+  org            Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  placementId    String    @unique
+  placement      Placement @relation(fields: [placementId], references: [id], onDelete: Cascade)
+  clientId       String
+  client         Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  candidateId    String
+  candidate      Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  jobId          String
+  invoiceNo      String
+  ctc            Int
+  billingRate    Float
+  feeAmount      Float
+  taxType        String    // "CGST_SGST" | "IGST" — derived from org vs client GSTIN state code
+  sgst           Float     @default(0)
+  cgst           Float     @default(0)
+  igst           Float     @default(0)
+  totalAmount    Float
+  status         String    @default("Draft") // Draft, Unpaid, Paid
+  published      Boolean   @default(false)
+  issuedAt       String
+  dueDate        String
+  notes          String?   @db.Text
+  sacCode        String    @default("998513")
+  billingAddress String?   @db.Text
+  clientGstin    String?
+
+  @@index([orgId])
+  @@index([clientId])
+}
+
+model Interview {
+  id          String   @id @default(cuid())
+  orgId       String
+  org         Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  candidateId String
+  candidate   Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  clientId    String
+  client      Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  jobId       String?
+  job         Job?     @relation(fields: [jobId], references: [id], onDelete: SetNull)
+  scheduledAt String   // ISO datetime
+  mode        String?
+  round       String?
+  notes       String?  @db.Text
+  status      String   @default("Scheduled")
+
+  @@index([orgId])
+  @@index([clientId])
+}
+
+model Activity {
+  id          String   @id @default(cuid())
+  orgId       String
+  org         Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  type        String
+  candidateId String?
+  jobId       String?
+  date        String
+  note        String
+  byClient    Boolean  @default(false)
+  byRecruiter Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  @@index([orgId])
+}
