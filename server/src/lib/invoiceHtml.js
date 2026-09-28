@@ -127,7 +127,7 @@ ${
       <div class="name">${esc(cand.name || "—")}</div>
       <p>Role: ${esc(job.title || cand.role || "—")}</p>
       <p>SAC Code: <strong>${esc(inv.sacCode || "998513")}</strong></p>
-      <p>Billing Rate: <strong>${inv.billingRate || 0}%</strong> of CTC</p>
+      <p>Billing: <strong>${inv.billingType === "FLAT" ? `Flat Fee ${INR(inv.billingRate || 0)}` : `${inv.billingRate || 0}% of CTC`}</strong></p>
     </div>
   </div>
 
@@ -141,7 +141,7 @@ ${
         <td>${serviceDesc}</td>
         <td>${esc(inv.sacCode || "998513")}</td>
         <td>${INR(inv.ctc || 0)}</td>
-        <td>${inv.billingRate || 0}%</td>
+        <td>${inv.billingType === "FLAT" ? "Flat" : `${inv.billingRate || 0}%`}</td>
         <td style="text-align:right"><strong>${INR(subtotal)}</strong></td>
       </tr>
     </tbody>

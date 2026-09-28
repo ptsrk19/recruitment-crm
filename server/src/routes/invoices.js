@@ -32,8 +32,10 @@ router.put("/:id", requireRole("ADMIN"), async (req, res) => {
   // Recompute GST server-side whenever ctc/billingRate/status change, using the
   // same state-aware logic as generation — never trust a client-supplied total.
   const ctc = b.ctc !== undefined ? Number(b.ctc) || 0 : existing.ctc;
+  const billingType = b.billingType ?? existing.billingType ?? "PERCENTAGE";
   const billingRate = b.billingRate !== undefined ? Number(b.billingRate) || 0 : existing.billingRate;
-  const feeAmount = (ctc * billingRate) / 100;
+  // billingRate means "percent of CTC" when PERCENTAGE, or "flat fee in ₹" when FLAT.
+  const feeAmount = billingType === "FLAT" ? billingRate : (ctc * billingRate) / 100;
   const client = await prisma.client.findFirst({ where: { id: existing.clientId, orgId: req.user.orgId } });
   const org = await prisma.organization.findUnique({ where: { id: req.user.orgId } });
   const gst = computeGst(feeAmount, org.gstin, b.clientGstin ?? existing.clientGstin ?? client?.gstin);
@@ -42,6 +44,7 @@ router.put("/:id", requireRole("ADMIN"), async (req, res) => {
     where: { id: existing.id },
     data: {
       ctc,
+      billingType,
       billingRate,
       feeAmount,
       taxType: gst.taxType,

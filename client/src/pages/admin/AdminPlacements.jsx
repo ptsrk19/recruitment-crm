@@ -153,6 +153,9 @@ export default function AdminPlacements() {
                     <span style={{ fontWeight: 700 }}>{inv.invoiceNo}</span>
                     <Badge text={inv.status} />
                     <span style={{ fontSize: 10, color: "#888" }}>{inv.taxType === "IGST" ? "IGST (inter-state)" : "CGST+SGST (intra-state)"}</span>
+                    <span style={{ fontSize: 10, color: "#6366F1", background: "#EEF2FF", padding: "1px 7px", borderRadius: 99, fontWeight: 700 }}>
+                      {inv.billingType === "FLAT" ? `Flat ${INR(inv.billingRate || 0)}` : `${inv.billingRate || 0}%`}
+                    </span>
                   </div>
                   <p style={{ margin: "0 0 4px", fontSize: 13, color: "#666" }}>
                     {cl?.name} · Issued: {fmtDate(inv.issuedAt)} · Due: {fmtDate(inv.dueDate)} {age && <span style={{ fontWeight: 700, color: age.color }}>· {age.label}</span>}
@@ -215,7 +218,15 @@ export default function AdminPlacements() {
         <Modal title={`Edit Invoice ${invForm.invoiceNo}`} onClose={() => setInvModal(null)}>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
             <Field label="CTC (₹)"><Input type="number" value={invForm.ctc || ""} onChange={(e) => setInvForm({ ...invForm, ctc: e.target.value })} /></Field>
-            <Field label="Billing Rate (%)"><Input type="number" step="0.01" value={invForm.billingRate || ""} onChange={(e) => setInvForm({ ...invForm, billingRate: e.target.value })} /></Field>
+            <Field label="Billing Type">
+              <Sel value={invForm.billingType || "PERCENTAGE"} onChange={(e) => setInvForm({ ...invForm, billingType: e.target.value })}>
+                <option value="PERCENTAGE">% of CTC</option>
+                <option value="FLAT">Flat fee ₹</option>
+              </Sel>
+            </Field>
+            <Field label={invForm.billingType === "FLAT" ? "Flat Fee (₹)" : "Billing Rate (%)"}>
+              <Input type="number" step="0.01" value={invForm.billingRate || ""} onChange={(e) => setInvForm({ ...invForm, billingRate: e.target.value })} />
+            </Field>
             <Field label="Due Date"><Input type="date" value={invForm.dueDate || ""} onChange={(e) => setInvForm({ ...invForm, dueDate: e.target.value })} /></Field>
             <Field label="Status">
               <Sel value={invForm.status || "Draft"} onChange={(e) => setInvForm({ ...invForm, status: e.target.value })}>
@@ -223,7 +234,7 @@ export default function AdminPlacements() {
               </Sel>
             </Field>
           </div>
-          <p style={{ fontSize: 12, color: "#888", marginBottom: 12 }}>GST is recalculated automatically from CTC × rate and each party's GSTIN state code when you save.</p>
+          <p style={{ fontSize: 12, color: "#888", marginBottom: 12 }}>Fee is CTC × rate for percentage billing, or the flat amount as-is for flat fee billing. GST is then recalculated from each party's GSTIN state code when you save.</p>
           <Field label="Notes"><Textarea value={invForm.notes || ""} onChange={(e) => setInvForm({ ...invForm, notes: e.target.value })} /></Field>
           <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
             <Btn variant="secondary" onClick={() => setInvModal(null)}>Cancel</Btn>

@@ -3,23 +3,10 @@ const prisma = require("../lib/prisma");
 const { auth, requireRole } = require("../middleware/auth");
 const { todayStr, addDays } = require("../lib/dates");
 const { computeGst } = require("../lib/gst");
+const { computeFee } = require("../lib/billing");
 
 router.use(auth);
 router.use(requireRole("ADMIN")); // placements & billing are an admin-only surface
-
-function getBillingRate(client, ctc) {
-  if (!client) return 0;
-  if (client.useBins && Array.isArray(client.ctcBins) && client.ctcBins.length > 0) {
-    const ctcNum = Number(ctc) || 0;
-    const sorted = [...client.ctcBins].sort((a, b) => Number(a.ctcMin) - Number(b.ctcMin));
-    for (const bin of sorted) {
-      const lo = Number(bin.ctcMin) || 0;
-      const hi = bin.ctcMax === "" || bin.ctcMax == null ? Infinity : Number(bin.ctcMax);
-      if (ctcNum >= lo && ctcNum <= hi) return Number(bin.rate) || 0;
-    }
-  }
-  return Number(client.billingRate) || 0;
-}
 
 router.get("/", async (req, res) => {
   const placements = await prisma.placement.findMany({ where: { orgId: req.user.orgId }, include: { invoice: true }, orderBy: { placedAt: "desc" } });
@@ -35,8 +22,7 @@ router.post("/", async (req, res) => {
   const client = await prisma.client.findFirst({ where: { id: b.clientId, orgId: req.user.orgId } });
   if (!client) return res.status(404).json({ error: "Client not found" });
 
-  const billingRate = getBillingRate(client, ctc);
-  const fee = (ctc * billingRate) / 100;
+  const { fee, billingType, billingRate } = computeFee(client, ctc);
   const placement = await prisma.placement.create({
     data: {
       orgId: req.user.orgId,
@@ -44,6 +30,7 @@ router.post("/", async (req, res) => {
       jobId: b.jobId,
       clientId: b.clientId,
       ctc,
+      billingType,
       billingRate,
       fee,
       startDate: b.startDate || todayStr(),
@@ -65,11 +52,10 @@ router.put("/:id", async (req, res) => {
   const b = req.body || {};
   const client = await prisma.client.findFirst({ where: { id: b.clientId || existing.clientId, orgId: req.user.orgId } });
   const ctc = b.ctc !== undefined ? Number(b.ctc) : existing.ctc;
-  const billingRate = getBillingRate(client, ctc);
-  const fee = (ctc * billingRate) / 100;
+  const { fee, billingType, billingRate } = computeFee(client, ctc);
   const placement = await prisma.placement.update({
     where: { id: existing.id },
-    data: { ctc, billingRate, fee, startDate: b.startDate ?? existing.startDate, feedback: b.feedback ?? existing.feedback },
+    data: { ctc, billingType, billingRate, fee, startDate: b.startDate ?? existing.startDate, feedback: b.feedback ?? existing.feedback },
   });
   res.json(placement);
 });
@@ -93,8 +79,8 @@ router.post("/:id/generate-invoice", async (req, res) => {
 
   const client = await prisma.client.findFirst({ where: { id: placement.clientId, orgId: req.user.orgId } });
   const org = await prisma.organization.findUnique({ where: { id: req.user.orgId } });
-  const billingRate = getBillingRate(client, placement.ctc);
-  const feeAmount = (placement.ctc * billingRate) / 100;
+  const billing = computeFee(client, placement.ctc);
+  const feeAmount = billing.fee;
   const gst = computeGst(feeAmount, org.gstin, client.gstin);
   const invoiceNo = await nextInvoiceNo(req.user.orgId, org.name);
   const dueDate = addDays(todayStr(), client.paymentTerms || 30);
@@ -108,7 +94,8 @@ router.post("/:id/generate-invoice", async (req, res) => {
       jobId: placement.jobId,
       invoiceNo,
       ctc: placement.ctc,
-      billingRate,
+      billingType: billing.billingType,
+      billingRate: billing.billingRate,
       feeAmount,
       taxType: gst.taxType,
       sgst: gst.sgst,

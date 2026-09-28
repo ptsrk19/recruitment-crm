@@ -43,7 +43,7 @@ export default function AdminClients() {
     }
   };
 
-  const addBin = () => setForm({ ...form, ctcBins: [...(form.ctcBins || []), { ctcMin: "", ctcMax: "", rate: "" }] });
+  const addBin = () => setForm({ ...form, ctcBins: [...(form.ctcBins || []), { ctcMin: "", ctcMax: "", type: "PERCENTAGE", value: "" }] });
   const updateBin = (i, key, val) => {
     const bins = [...form.ctcBins];
     bins[i] = { ...bins[i], [key]: val };
@@ -101,7 +101,7 @@ export default function AdminClients() {
                       <div style={{ marginTop: 8, display: "flex", gap: 6, flexWrap: "wrap" }}>
                         {[...c.ctcBins].sort((a, b) => Number(a.ctcMin) - Number(b.ctcMin)).map((bin, i) => (
                           <span key={i} style={{ fontSize: 11, background: "#EEF2FF", color: "#4338CA", padding: "2px 8px", borderRadius: 99, fontWeight: 600 }}>
-                            {bin.ctcMax ? `${fmtL(bin.ctcMin)}–${fmtL(bin.ctcMax)}` : `${fmtL(bin.ctcMin)}+`} → {bin.rate}%
+                            {bin.ctcMax ? `${fmtL(bin.ctcMin)}–${fmtL(bin.ctcMax)}` : `${fmtL(bin.ctcMin)}+`} → {bin.type === "FLAT" ? INR(bin.value) : `${bin.value}%`}
                           </span>
                         ))}
                       </div>
@@ -149,14 +149,27 @@ export default function AdminClients() {
           {form.useBins ? (
             <div style={{ marginBottom: 16 }}>
               {(form.ctcBins || []).map((bin, i) => (
-                <div key={i} style={{ display: "flex", gap: 8, marginBottom: 8, alignItems: "center" }}>
-                  <Input type="number" placeholder="Min CTC" value={bin.ctcMin} onChange={(e) => updateBin(i, "ctcMin", e.target.value)} />
-                  <Input type="number" placeholder="Max CTC (blank = no cap)" value={bin.ctcMax} onChange={(e) => updateBin(i, "ctcMax", e.target.value)} />
-                  <Input type="number" placeholder="Rate %" value={bin.rate} onChange={(e) => updateBin(i, "rate", e.target.value)} style={{ width: 100 }} />
+                <div key={i} style={{ display: "flex", gap: 8, marginBottom: 8, alignItems: "center", flexWrap: "wrap" }}>
+                  <Input type="number" placeholder="Min CTC" value={bin.ctcMin} onChange={(e) => updateBin(i, "ctcMin", e.target.value)} style={{ width: 120 }} />
+                  <Input type="number" placeholder="Max CTC (blank = no cap)" value={bin.ctcMax} onChange={(e) => updateBin(i, "ctcMax", e.target.value)} style={{ width: 170 }} />
+                  <Sel value={bin.type || "PERCENTAGE"} onChange={(e) => updateBin(i, "type", e.target.value)} style={{ width: 110 }}>
+                    <option value="PERCENTAGE">% of CTC</option>
+                    <option value="FLAT">Flat fee ₹</option>
+                  </Sel>
+                  <Input
+                    type="number"
+                    placeholder={bin.type === "FLAT" ? "Amount ₹" : "Rate %"}
+                    value={bin.value ?? ""}
+                    onChange={(e) => updateBin(i, "value", e.target.value)}
+                    style={{ width: 110 }}
+                  />
                   <button onClick={() => removeBin(i)} style={{ border: "none", background: "none", color: "#EF4444", cursor: "pointer" }}><Icon name="trash" size={14} /></button>
                 </div>
               ))}
               <Btn small variant="secondary" onClick={addBin}><Icon name="plus" size={12} />Add Tier</Btn>
+              <p style={{ fontSize: 11, color: "#aaa", marginTop: 8 }}>
+                Example: "0 – 8,00,000 → Flat fee ₹15,000" then "8,00,000+ → 4% of CTC" — mix flat and percentage tiers freely.
+              </p>
             </div>
           ) : (
             <Field label="Flat Billing Rate (%)"><Input type="number" step="0.01" value={form.billingRate || ""} onChange={(e) => setForm({ ...form, billingRate: e.target.value })} /></Field>

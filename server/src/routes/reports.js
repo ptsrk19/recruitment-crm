@@ -33,15 +33,15 @@ router.get("/:type", async (req, res) => {
 
   if (type === "placements") {
     const placements = await prisma.placement.findMany({ where: { orgId }, include: { candidate: true, client: true, job: true, invoice: true } });
-    const hdr = ["Candidate", "Client", "Job", "CTC", "Billing Rate %", "Fee", "GST", "Total Invoice", "Start Date", "Invoice Status", "Placed Date"];
-    const rows = placements.map((p) => [p.candidate?.name || "", p.client?.name || "", p.job?.title || "", p.ctc, p.billingRate, p.fee, p.invoice ? p.invoice.sgst + p.invoice.cgst + p.invoice.igst : "", p.invoice?.totalAmount || "", p.startDate, p.invoiceStatus, p.placedAt]);
+    const hdr = ["Candidate", "Client", "Job", "CTC", "Billing Type", "Billing Rate", "Fee", "GST", "Total Invoice", "Start Date", "Invoice Status", "Placed Date"];
+    const rows = placements.map((p) => [p.candidate?.name || "", p.client?.name || "", p.job?.title || "", p.ctc, p.billingType === "FLAT" ? "Flat Fee (₹)" : "Percentage (%)", p.billingRate, p.fee, p.invoice ? p.invoice.sgst + p.invoice.cgst + p.invoice.igst : "", p.invoice?.totalAmount || "", p.startDate, p.invoiceStatus, p.placedAt]);
     return res.json([hdr, ...rows]);
   }
 
   if (type === "invoices") {
     const invoices = await prisma.invoice.findMany({ where: { orgId }, include: { client: true, candidate: true } });
-    const hdr = ["Invoice No", "Client", "Candidate", "Issue Date", "Due Date", "CTC", "Rate %", "Fee", "SGST", "CGST", "IGST", "Total", "Status", "Days Outstanding"];
-    const rows = invoices.map((inv) => [inv.invoiceNo, inv.client?.name || "", inv.candidate?.name || "", inv.issuedAt, inv.dueDate, inv.ctc, inv.billingRate, inv.feeAmount, inv.sgst, inv.cgst, inv.igst, inv.totalAmount, inv.status, inv.issuedAt ? daysBetween(inv.issuedAt, todayStr()) : 0]);
+    const hdr = ["Invoice No", "Client", "Candidate", "Issue Date", "Due Date", "CTC", "Billing Type", "Rate/Amount", "Fee", "SGST", "CGST", "IGST", "Total", "Status", "Days Outstanding"];
+    const rows = invoices.map((inv) => [inv.invoiceNo, inv.client?.name || "", inv.candidate?.name || "", inv.issuedAt, inv.dueDate, inv.ctc, inv.billingType === "FLAT" ? "Flat Fee (₹)" : "Percentage (%)", inv.billingRate, inv.feeAmount, inv.sgst, inv.cgst, inv.igst, inv.totalAmount, inv.status, inv.issuedAt ? daysBetween(inv.issuedAt, todayStr()) : 0]);
     return res.json([hdr, ...rows]);
   }
 

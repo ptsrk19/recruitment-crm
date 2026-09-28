@@ -198,7 +198,8 @@ model Placement {
   clientId      String
   client        Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
   ctc           Int
-  billingRate   Float
+  billingType   String   @default("PERCENTAGE") // "PERCENTAGE" or "FLAT"
+  billingRate   Float    // percentage (e.g. 8.33) if PERCENTAGE, flat fee in ₹ if FLAT
   fee           Float
   startDate     String
   placedAt      String
@@ -224,7 +225,8 @@ model Invoice {
   jobId          String
   invoiceNo      String
   ctc            Int
-  billingRate    Float
+  billingType    String    @default("PERCENTAGE") // "PERCENTAGE" or "FLAT"
+  billingRate    Float     // percentage if PERCENTAGE, flat fee in ₹ if FLAT
   feeAmount      Float
   taxType        String    // "CGST_SGST" | "IGST" — derived from org vs client GSTIN state code
   sgst           Float     @default(0)
